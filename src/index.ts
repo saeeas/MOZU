@@ -3,16 +3,13 @@ import { App, LogLevel } from "@slack/bolt";
 import { QuoteHandler } from "./handlers/quote";
 
 /**
- * MOZU - Slack見積もり自動化Bot
+ * MOZU - 見積もりアシスタントBot
  *
- * 処理フロー:
- * 1. 特定チャンネルに見積もり依頼が投稿される
- * 2. AIが依頼内容を解析（商品名・数量・メーカーなど抽出）
- * 3. Google Sheetsから掛け率を取得
- * 4. Notionから見積もりルールを取得
- * 5. メーカーWebの検索ヒントを生成
- * 6. 見積もりドラフトをスレッドに投稿
- * 7. ユーザーが確認・修正して提出
+ * 使い方:
+ * 1. BotにDMでテキストを送る
+ * 2. チャンネルでBotをメンションしてテキストを送る
+ * 3. PDFファイルを添付して送る
+ * → 金額・納期・在庫を調査して返信
  */
 
 const app = new App({
@@ -23,121 +20,144 @@ const app = new App({
   logLevel: LogLevel.INFO,
 });
 
-const quoteHandler = new QuoteHandler();
-const QUOTE_CHANNEL = process.env.SLACK_QUOTE_CHANNEL_ID;
+const handler = new QuoteHandler();
 
-// --- メッセージ監視 ---
-app.message(async ({ message, say, client }) => {
-  // botのメッセージは無視
-  if (message.subtype === "bot_message" || !("text" in message)) return;
+/**
+ * ファイル（PDF）をダウンロードしてBufferを返す
+ */
+async function downloadFile(
+  client: any,
+  fileId: string
+): Promise<Buffer> {
+  const info = await client.files.info({ file: fileId });
+  const fileUrl =
+    (info.file as any)?.url_private_download ||
+    (info.file as any)?.url_private;
 
-  // 指定チャンネル以外は無視
-  if (QUOTE_CHANNEL && message.channel !== QUOTE_CHANNEL) return;
+  const res = await fetch(fileUrl, {
+    headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+  });
+  return Buffer.from(await res.arrayBuffer());
+}
 
-  const text = message.text || "";
+/**
+ * メッセージを処理して結果を返す共通ロジック
+ */
+async function processMessage(
+  client: any,
+  text: string,
+  files: any[] | undefined
+): Promise<{ text: string; blocks: any[] }> {
+  if (files && files.length > 0) {
+    const file = files[0];
+    if (file.mimetype === "application/pdf") {
+      const buffer = await downloadFile(client, file.id);
+      return handler.handlePdf(buffer, text);
+    }
+  }
 
-  // 見積もり依頼っぽいメッセージかどうかの簡易判定
-  // （「見積」「見積もり」「価格」「単価」「いくら」などを含む）
-  const quoteKeywords = [
-    "見積",
-    "見積もり",
-    "価格",
-    "単価",
-    "いくら",
-    "金額",
-    "納期",
-    "見積り",
-  ];
-  const isQuoteRequest = quoteKeywords.some((kw) => text.includes(kw));
+  if (text) {
+    return handler.handleText(text);
+  }
 
-  if (!isQuoteRequest) return;
+  return {
+    text: "見積もり依頼のテキストか、PDFファイルを送ってください。",
+    blocks: [],
+  };
+}
+
+// --- DM でメッセージを受け取る ---
+app.event("message", async ({ event, client, say }) => {
+  // bot自身のメッセージは無視
+  if ("bot_id" in event && (event as any).bot_id) return;
+  if (!("channel_type" in event)) return;
+
+  // DMのみ反応（チャンネルはメンション経由）
+  if ((event as any).channel_type !== "im") return;
+
+  const text = "text" in event ? (event as any).text || "" : "";
+  const files = "files" in event ? (event as any).files : undefined;
+  const threadTs = "thread_ts" in event ? (event as any).thread_ts : event.ts;
 
   try {
-    // 処理中のリアクションを付ける
     await client.reactions.add({
-      channel: message.channel,
-      timestamp: message.ts,
+      channel: event.channel,
+      timestamp: event.ts,
       name: "hourglass_flowing_sand",
     });
 
-    // 見積もりドラフトを生成
-    const response = await quoteHandler.handle(
-      text,
-      "user" in message ? message.user || "" : "",
-      message.channel,
-      message.ts,
-      "thread_ts" in message ? message.thread_ts : undefined
-    );
+    const response = await processMessage(client, text, files);
 
-    // スレッドに見積もりドラフトを投稿
-    await say({
-      text: response.text,
-      blocks: response.blocks,
-      thread_ts: message.ts,
-    });
+    await say({ text: response.text, blocks: response.blocks, thread_ts: threadTs });
 
-    // 完了リアクション
     await client.reactions.remove({
-      channel: message.channel,
-      timestamp: message.ts,
+      channel: event.channel,
+      timestamp: event.ts,
       name: "hourglass_flowing_sand",
     });
     await client.reactions.add({
-      channel: message.channel,
-      timestamp: message.ts,
+      channel: event.channel,
+      timestamp: event.ts,
       name: "white_check_mark",
     });
   } catch (error) {
-    console.error("見積もり処理エラー:", error);
-
-    // エラーリアクション
+    console.error("処理エラー:", error);
     await client.reactions.add({
-      channel: message.channel,
-      timestamp: message.ts,
+      channel: event.channel,
+      timestamp: event.ts,
       name: "x",
     });
-
     await say({
-      text: `見積もり処理中にエラーが発生しました。手動で確認してください。\nエラー: ${error instanceof Error ? error.message : "不明"}`,
-      thread_ts: message.ts,
+      text: `エラー: ${error instanceof Error ? error.message : "不明"}`,
+      thread_ts: threadTs,
     });
   }
 });
 
-// --- ボタンアクション ---
-app.action("edit_prices", async ({ ack, body, client }) => {
-  await ack();
-  // 価格手動入力のモーダルを表示（将来実装）
-  if (body.type === "block_actions" && body.trigger_id) {
-    await client.views.open({
-      trigger_id: body.trigger_id,
-      view: {
-        type: "modal",
-        title: { type: "plain_text", text: "価格入力" },
-        submit: { type: "plain_text", text: "更新" },
-        blocks: [
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "カタログで確認した定価を入力してください（今後実装予定）",
-            },
-          },
-        ],
-      },
+// --- チャンネルでメンション ---
+app.event("app_mention", async ({ event, client, say }) => {
+  const text = event.text?.replace(/<@[^>]+>/g, "").trim() || "";
+  const files = (event as any).files;
+  const threadTs = event.thread_ts || event.ts;
+
+  try {
+    await client.reactions.add({
+      channel: event.channel,
+      timestamp: event.ts,
+      name: "hourglass_flowing_sand",
+    });
+
+    const response = await processMessage(client, text, files);
+
+    await say({ text: response.text, blocks: response.blocks, thread_ts: threadTs });
+
+    await client.reactions.remove({
+      channel: event.channel,
+      timestamp: event.ts,
+      name: "hourglass_flowing_sand",
+    });
+    await client.reactions.add({
+      channel: event.channel,
+      timestamp: event.ts,
+      name: "white_check_mark",
+    });
+  } catch (error) {
+    console.error("処理エラー:", error);
+    await client.reactions.add({
+      channel: event.channel,
+      timestamp: event.ts,
+      name: "x",
+    });
+    await say({
+      text: `エラー: ${error instanceof Error ? error.message : "不明"}`,
+      thread_ts: threadTs,
     });
   }
-});
-
-app.action("generate_pdf", async ({ ack, say }) => {
-  await ack();
-  // PDF生成（将来実装）
-  await say("PDF生成機能は今後実装予定です。");
 });
 
 // --- 起動 ---
 (async () => {
   await app.start();
-  console.log("⚡ MOZU 見積もりBot が起動しました");
-  console.log(`   監視チャンネル: ${QUOTE_CHANNEL || "全チャンネル"}`);
+  console.log("MOZU 見積もりアシスタント 起動");
+  console.log("  DM or メンションで依頼を受け付けます");
 })();

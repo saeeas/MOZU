@@ -1,189 +1,153 @@
-import { QuoteDraft, QuoteLineItem } from "../types/quote";
+import { QuoteResult, ItemResearchResult } from "../types/quote";
 
 /**
- * 見積もりドラフトをSlack投稿用のメッセージに整形する
+ * 見積もり調査結果をSlackメッセージに整形する
  */
 export class QuoteFormatter {
-  /**
-   * Slack Block Kit 形式のメッセージを生成
-   */
-  formatForSlack(draft: QuoteDraft): { text: string; blocks: any[] } {
+  format(result: QuoteResult): { text: string; blocks: any[] } {
     const blocks: any[] = [];
 
     // ヘッダー
     blocks.push({
       type: "header",
-      text: {
-        type: "plain_text",
-        text: "📋 見積もりドラフト",
-      },
+      text: { type: "plain_text", text: "見積もり調査結果" },
     });
 
-    // 顧客情報
-    if (draft.request.customerName) {
+    if (result.request.customerName) {
       blocks.push({
         type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `*顧客:* ${draft.request.customerName}`,
-        },
+        text: { type: "mrkdwn", text: `*顧客:* ${result.request.customerName}` },
       });
     }
 
     blocks.push({ type: "divider" });
 
-    // 明細
-    for (const item of draft.lineItems) {
+    // 各商品
+    for (const item of result.items) {
       blocks.push({
         type: "section",
-        text: {
-          type: "mrkdwn",
-          text: this.formatLineItem(item),
-        },
+        text: { type: "mrkdwn", text: this.formatItem(item) },
       });
+      blocks.push({ type: "divider" });
     }
-
-    blocks.push({ type: "divider" });
 
     // 合計
-    if (draft.totalAmount) {
+    if (result.totalAmount) {
       blocks.push({
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `*合計: ¥${draft.totalAmount.toLocaleString()}*（税抜）`,
+          text: `*合計: ¥${result.totalAmount.toLocaleString()}*（税抜）`,
         },
       });
-    } else {
+    }
+
+    // 確認事項
+    const allManualChecks = result.items.flatMap((i) => i.manualCheckNeeded);
+    if (result.warnings.length > 0 || allManualChecks.length > 0) {
+      const lines = [
+        ...result.warnings.map((w) => `• ${w}`),
+        ...allManualChecks.map((c) => `• ${c}`),
+      ];
       blocks.push({
         type: "section",
         text: {
           type: "mrkdwn",
-          text: "*合計: 算出不可*（カタログ価格の手動入力が必要です）",
+          text: `*要確認:*\n${lines.join("\n")}`,
         },
       });
     }
 
     // 適用ルール
-    if (draft.appliedRules.length > 0) {
+    if (result.appliedRules.length > 0) {
       blocks.push({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            "*適用ルール:*\n" +
-            draft.appliedRules.map((r) => `• ${r}`).join("\n"),
-        },
-      });
-    }
-
-    // 警告・確認事項
-    if (draft.warnings.length > 0) {
-      blocks.push({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            "*確認事項:*\n" +
-            draft.warnings.join("\n"),
-        },
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: `適用ルール: ${result.appliedRules.join(" / ")}`,
+          },
+        ],
       });
     }
 
     // 納期
-    if (draft.request.requestedDelivery) {
+    if (result.request.requestedDelivery) {
       blocks.push({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `*希望納期:* ${draft.request.requestedDelivery}`,
-        },
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: `希望納期: ${result.request.requestedDelivery}`,
+          },
+        ],
       });
     }
 
-    // アクションボタン
-    blocks.push({
-      type: "actions",
-      elements: [
-        {
-          type: "button",
-          text: { type: "plain_text", text: "価格を手動入力" },
-          action_id: "edit_prices",
-          value: draft.request.slackMeta.messageTs,
-        },
-        {
-          type: "button",
-          text: { type: "plain_text", text: "見積書PDF生成" },
-          action_id: "generate_pdf",
-          style: "primary",
-          value: draft.request.slackMeta.messageTs,
-        },
-      ],
-    });
-
-    return {
-      text: this.formatPlainText(draft),
-      blocks,
-    };
+    return { text: this.formatPlain(result), blocks };
   }
 
-  /**
-   * 明細1行をフォーマット
-   */
-  private formatLineItem(item: QuoteLineItem): string {
-    const parts: string[] = [];
+  private formatItem(item: ItemResearchResult): string {
+    const lines: string[] = [];
 
-    // 商品名 + メーカー + 型番
+    // 商品名行
     let title = `*${item.productName}*`;
     if (item.manufacturer) title += ` (${item.manufacturer})`;
-    if (item.modelNumber) title += ` [${item.modelNumber}]`;
-    parts.push(title);
+    if (item.modelNumber) title += ` \`${item.modelNumber}\``;
+    lines.push(title);
 
     // 数量
-    parts.push(`数量: ${item.quantity}${item.unit}`);
+    lines.push(`数量: ${item.quantity}${item.unit}`);
 
-    // 価格情報
+    // 金額
     if (item.listPrice) {
-      parts.push(`定価: ¥${item.listPrice.toLocaleString()}`);
+      lines.push(`定価: ¥${item.listPrice.toLocaleString()}`);
     }
     if (item.markupRate) {
-      parts.push(`掛け率: ${(item.markupRate * 100).toFixed(0)}%`);
+      lines.push(`掛け率: ${(item.markupRate * 100).toFixed(0)}%`);
     }
     if (item.unitPrice) {
-      parts.push(`単価: ¥${item.unitPrice.toLocaleString()}`);
+      lines.push(`*見積単価: ¥${item.unitPrice.toLocaleString()}*`);
     }
     if (item.subtotal) {
-      parts.push(`小計: ¥${item.subtotal.toLocaleString()}`);
+      lines.push(`*小計: ¥${item.subtotal.toLocaleString()}*`);
     }
 
-    // 納期
+    // 納期・在庫
     if (item.estimatedDelivery) {
-      parts.push(`納期: ${item.estimatedDelivery}`);
+      lines.push(`納期: ${item.estimatedDelivery}`);
+    }
+    if (item.stockStatus) {
+      lines.push(`在庫: ${item.stockStatus}`);
     }
 
-    // 注意
-    if (item.priceNote) {
-      parts.push(`💡 ${item.priceNote}`);
+    // 調査メモ
+    if (item.researchNote) {
+      lines.push(`> ${item.researchNote}`);
     }
 
-    return parts.join("\n");
+    // 手動確認
+    if (item.manualCheckNeeded.length > 0) {
+      lines.push(
+        item.manualCheckNeeded.map((c) => `:warning: ${c}`).join("\n")
+      );
+    }
+
+    return lines.join("\n");
   }
 
-  /**
-   * プレーンテキスト版（通知用フォールバック）
-   */
-  private formatPlainText(draft: QuoteDraft): string {
-    const items = draft.lineItems
-      .map(
-        (item) =>
-          `${item.productName} x${item.quantity}${item.unit}${item.subtotal ? ` → ¥${item.subtotal.toLocaleString()}` : " → 要確認"}`
-      )
+  private formatPlain(result: QuoteResult): string {
+    const items = result.items
+      .map((i) => {
+        const price = i.subtotal
+          ? `¥${i.subtotal.toLocaleString()}`
+          : "要確認";
+        const stock = i.stockStatus || "要確認";
+        const delivery = i.estimatedDelivery || "要確認";
+        return `${i.productName} x${i.quantity} → ${price} / 納期:${delivery} / 在庫:${stock}`;
+      })
       .join("\n");
 
-    const total = draft.totalAmount
-      ? `合計: ¥${draft.totalAmount.toLocaleString()}`
-      : "合計: 要確認";
-
-    return `見積もりドラフト\n${items}\n${total}`;
+    return `見積もり調査結果\n${items}`;
   }
 }

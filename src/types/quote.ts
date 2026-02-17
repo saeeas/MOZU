@@ -1,21 +1,13 @@
-/** Slackの依頼文からAIが抽出した情報 */
+/** 依頼から抽出した情報 */
 export interface QuoteRequest {
-  /** 依頼元（Slackメッセージの投稿者） */
-  requestedBy: string;
-  /** 顧客名（依頼文に記載があれば） */
+  /** 顧客名（記載があれば） */
   customerName?: string;
   /** 依頼された商品リスト */
   items: QuoteRequestItem[];
-  /** 希望納期（依頼文に記載があれば） */
+  /** 希望納期（記載があれば） */
   requestedDelivery?: string;
   /** その他の条件・備考 */
   notes?: string;
-  /** 元のSlackメッセージ情報 */
-  slackMeta: {
-    channelId: string;
-    messageTs: string;
-    threadTs?: string;
-  };
 }
 
 export interface QuoteRequestItem {
@@ -53,8 +45,8 @@ export interface QuoteRule {
   priority: number;
 }
 
-/** 計算済みの見積もり1行 */
-export interface QuoteLineItem {
+/** 商品ごとの調査結果 */
+export interface ItemResearchResult {
   productName: string;
   manufacturer?: string;
   modelNumber?: string;
@@ -64,27 +56,29 @@ export interface QuoteLineItem {
   listPrice?: number;
   /** 掛け率 */
   markupRate?: number;
-  /** 単価（定価 × 掛け率） */
+  /** 見積単価（定価 x 掛け率） */
   unitPrice?: number;
   /** 小計 */
   subtotal?: number;
   /** 納期目安 */
   estimatedDelivery?: string;
-  /** 価格が取得できなかった場合の理由 */
-  priceNote?: string;
+  /** 在庫状況 */
+  stockStatus?: string;
+  /** 調査メモ（AIからの補足情報） */
+  researchNote?: string;
+  /** 要手動確認の項目 */
+  manualCheckNeeded: string[];
 }
 
-/** 最終的な見積もりドラフト */
-export interface QuoteDraft {
-  /** 依頼情報 */
+/** 最終的な見積もり調査結果 */
+export interface QuoteResult {
   request: QuoteRequest;
-  /** 見積もり明細 */
-  lineItems: QuoteLineItem[];
-  /** 合計金額 */
+  items: ItemResearchResult[];
+  /** 合計金額（算出できた分のみ） */
   totalAmount?: number;
   /** 適用されたルール */
   appliedRules: string[];
-  /** 注意事項・確認事項 */
+  /** 確認事項 */
   warnings: string[];
   /** 生成日時 */
   createdAt: Date;

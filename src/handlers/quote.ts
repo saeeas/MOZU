@@ -4,77 +4,78 @@ import { NotionService } from "../services/notion";
 import { CatalogService } from "../services/catalog";
 import { QuoteCalculator } from "../services/calculator";
 import { QuoteFormatter } from "../services/formatter";
+import { extractTextFromPdf } from "../services/pdf-reader";
 
 /**
- * 見積もり依頼のメインハンドラー
- * Slackメッセージ → 解析 → 調査 → 計算 → 返信 の一連の流れを管理
+ * 見積もり調査のメインハンドラー
+ * テキスト or PDF → 解析 → 金額/納期/在庫調査 → 結果返信
  */
 export class QuoteHandler {
-  private parser: RequestParser;
-  private sheets: SheetsService;
-  private notion: NotionService;
-  private catalog: CatalogService;
-  private calculator: QuoteCalculator;
-  private formatter: QuoteFormatter;
+  private parser = new RequestParser();
+  private sheets = new SheetsService();
+  private notion = new NotionService();
+  private catalog = new CatalogService();
+  private calculator = new QuoteCalculator();
+  private formatter = new QuoteFormatter();
 
-  constructor() {
-    this.parser = new RequestParser();
-    this.sheets = new SheetsService();
-    this.notion = new NotionService();
-    this.catalog = new CatalogService();
-    this.calculator = new QuoteCalculator();
-    this.formatter = new QuoteFormatter();
+  /**
+   * テキストメッセージから見積もり調査を実行
+   */
+  async handleText(text: string): Promise<{ text: string; blocks: any[] }> {
+    return this.process(text);
   }
 
   /**
-   * Slackメッセージを処理して見積もりドラフトを生成
+   * PDFファイルから見積もり調査を実行
    */
-  async handle(
-    messageText: string,
-    userId: string,
-    channelId: string,
-    messageTs: string,
-    threadTs?: string
+  async handlePdf(
+    pdfBuffer: Buffer,
+    additionalText?: string
+  ): Promise<{ text: string; blocks: any[] }> {
+    const pdfText = await extractTextFromPdf(pdfBuffer);
+    const combined = additionalText
+      ? `${additionalText}\n\n--- PDF内容 ---\n${pdfText}`
+      : pdfText;
+    return this.process(combined);
+  }
+
+  private async process(
+    inputText: string
   ): Promise<{ text: string; blocks: any[] }> {
     // 1. 依頼内容を解析
-    const request = await this.parser.parse(
-      messageText,
-      userId,
-      channelId,
-      messageTs,
-      threadTs
-    );
+    const request = await this.parser.parse(inputText);
 
-    // 2. 並行して情報を取得
-    const [catalogResults, rates, rulesText] = await Promise.all([
-      // カタログ検索（各商品を並行処理）
-      Promise.all(
-        request.items.map((item) =>
-          this.catalog.lookup(
-            item.productName,
-            item.manufacturer,
-            item.modelNumber
-          )
-        )
-      ),
-      // 掛け率テーブル取得
+    // 2. 掛け率 + ルールを取得
+    const [rates, rulesText, rules] = await Promise.all([
       this.sheets.getMarkupRates(),
-      // 見積もりルール取得
       this.notion.getRulesAsText(),
+      this.notion.getQuoteRules(),
     ]);
 
-    // 3. ルールオブジェクト取得（テキスト版とは別にcalculatorに渡す用）
-    const rules = await this.notion.getQuoteRules();
-
-    // 4. 見積もり計算
-    const draft = this.calculator.calculate(
-      request,
-      catalogResults,
-      rates,
-      rules
+    // 3. 各商品を並行で調査（金額・納期・在庫）
+    const researchResults = await Promise.all(
+      request.items.map((item) => {
+        const rate = rates.find((r) => {
+          const m = item.manufacturer?.toLowerCase() || "";
+          const rm = r.manufacturer.toLowerCase();
+          return rm === m || rm.includes(m) || m.includes(rm);
+        });
+        return this.catalog.research(item, rate, rulesText);
+      })
     );
 
-    // 5. Slackメッセージに整形
-    return this.formatter.formatForSlack(draft);
+    // 4. ルール名をテキスト化
+    const appliedRulesText = rules.map((r) => `${r.name}: ${r.action}`);
+
+    // 5. 計算
+    const result = this.calculator.calculate(
+      request,
+      researchResults,
+      rates,
+      appliedRulesText
+    );
+
+    // 6. フォーマット
+    return this.formatter.format(result);
   }
 }

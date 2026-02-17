@@ -1,7 +1,7 @@
 {
   "name": "mozu-quote-bot",
   "version": "1.0.0",
-  "description": "Slack見積もり自動化Bot - 依頼を受けて掛け率・ルール適用後にドラフト返信",
+  "description": "見積もりアシスタントBot - テキストやPDFで依頼を受けて金額・納期・在庫を調査",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -15,10 +15,11 @@
     "googleapis": "^144.0.0",
     "openai": "^4.70.0",
     "dotenv": "^16.4.0",
-    "cheerio": "^1.0.0"
+    "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/pdf-parse": "^1.1.4",
     "typescript": "^5.6.0",
     "ts-node": "^10.9.0"
   }

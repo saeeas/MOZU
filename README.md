@@ -1,23 +1,23 @@
-# MOZU - Slack見積もり自動化Bot
+# MOZU - 見積もりアシスタントBot
 
-Slackの特定チャンネルに投稿された見積もり依頼を検知し、掛け率・ルールを適用した見積もりドラフトを自動生成するBot。
+BotにDMやメンションで依頼内容（テキスト or PDF）を送ると、**金額・納期・在庫**を調査してスレッドで返してくれるSlack Bot。
 
 ## 処理フロー
 
 ```
-Slack #見積もり依頼 に投稿
-  ↓ Bot が検知（キーワード: 見積, 価格, 納期 など）
-  ↓ ⏳ リアクションで処理中を通知
+あなたが Bot に DM or メンション
+  テキスト: 「TOTO TCF6543 2台、LIXIL BF-SC6 5個」
+  or PDF添付: 見積依頼書.pdf
   ↓
-  ├─ AI が依頼文を解析（商品名・数量・メーカーを抽出）
+  ⏳ 処理中...
+  ├─ AI が内容を解析（商品名・数量・メーカーを抽出）
   ├─ Google Sheets から掛け率を取得
   ├─ Notion から見積もりルールを取得
-  ├─ メーカーWebの検索ヒントを生成
+  ├─ AI が各商品の定価・納期・在庫を調査
   ↓
-  見積もりドラフトをスレッドに投稿
-  ↓ ✅ リアクションで完了を通知
+  ✅ スレッドに調査結果を返信
   ↓
-  あなたが確認 → 提出
+  あなたが確認 → 見積書作成 → 提出
 ```
 
 ## セットアップ
@@ -26,30 +26,32 @@ Slack #見積もり依頼 に投稿
 
 | サービス | 用途 | 取得方法 |
 |---|---|---|
-| Slack App | Bot本体 | [api.slack.com/apps](https://api.slack.com/apps) で作成 |
-| OpenAI API | 依頼文の解析 | [platform.openai.com](https://platform.openai.com) |
-| Google Cloud | スプシ読み取り | サービスアカウント作成 → Sheets API 有効化 |
-| Notion Integration | ルール取得 | [notion.so/my-integrations](https://www.notion.so/my-integrations) |
+| Slack App | Bot本体 | api.slack.com/apps で作成 |
+| OpenAI API | 依頼解析 + 商品調査 | platform.openai.com |
+| Google Cloud | スプシ読み取り | サービスアカウント作成 → Sheets API有効化 |
+| Notion | ルール取得 | notion.so/my-integrations |
 
 ### 2. Slack Appの設定
 
-1. [api.slack.com/apps](https://api.slack.com/apps) で新しいAppを作成
+1. api.slack.com/apps で新しいAppを作成
 2. **Socket Mode** を有効化 → App-Level Token (`xapp-`) を取得
 3. **OAuth & Permissions** で以下のスコープを追加:
-   - `channels:history` - チャンネルのメッセージを読む
-   - `chat:write` - メッセージを投稿
-   - `reactions:write` - リアクションを付ける
-   - `reactions:read` - リアクションを読む
-4. **Event Subscriptions** で `message.channels` を購読
+   - `im:history` - DMを読む
+   - `im:read` - DMチャンネル情報
+   - `chat:write` - メッセージ投稿
+   - `reactions:write` - リアクション操作
+   - `files:read` - 添付ファイル読み取り
+   - `app_mentions:read` - メンション受信
+4. **Event Subscriptions** で購読:
+   - `message.im` - DMメッセージ
+   - `app_mention` - メンション
 5. ワークスペースにインストール → Bot Token (`xoxb-`) を取得
-6. Botを見積もり依頼チャンネルに招待
 
-### 3. Google Sheetsの設定
+### 3. Google Sheets（掛け率）
 
-1. Google Cloud Console でサービスアカウントを作成
-2. Sheets API を有効化
-3. サービスアカウントのメールアドレスにスプレッドシートを共有（閲覧者）
-4. スプレッドシートの形式:
+サービスアカウントにスプレッドシートを共有（閲覧者）。
+
+シート名「掛け率」で以下の形式:
 
 | メーカー名 | カテゴリ | 掛け率 |
 |---|---|---|
@@ -57,75 +59,66 @@ Slack #見積もり依頼 に投稿
 | LIXIL | 建材 | 0.60 |
 | パナソニック | 電設 | 0.68 |
 
-シート名を「掛け率」にしてください。
+### 4. Notion（見積もりルール）
 
-### 4. Notionの設定
+データベースを作成:
 
-1. [notion.so/my-integrations](https://www.notion.so/my-integrations) でIntegrationを作成
-2. 見積もりルール用のデータベースを作成（以下のプロパティ）:
-
-| プロパティ名 | 型 | 説明 |
+| プロパティ名 | 型 | 例 |
 |---|---|---|
-| ルール名 | タイトル | ルールの名前 |
-| 条件 | テキスト | いつ適用するか |
-| アクション | テキスト | 何をするか |
-| 優先度 | 数値 | 適用順序（小さい方が先） |
+| ルール名 | タイトル | 大口割引 |
+| 条件 | テキスト | 合計50万円以上の場合 |
+| アクション | テキスト | 5%追加割引 |
+| 優先度 | 数値 | 1 |
 
-3. データベースにIntegrationを接続（共有 → コネクト追加）
-
-### 5. 環境変数の設定
+### 5. 起動
 
 ```bash
 cp .env.example .env
-```
+# .env を編集して各APIキーを設定
 
-`.env` を編集して各APIキーを設定。
-
-### 6. 起動
-
-```bash
 npm install
 npm run build
 npm start
-
-# 開発時
-npm run dev
 ```
 
 ## 使い方
 
-Slackの見積もり依頼チャンネルに、普通に見積もり依頼を投稿するだけ。
+### テキストで依頼（DM or メンション）
 
-例:
 ```
-ABC工業さんから見積もり依頼です
+ABC工業さん向け
 - TOTO ウォシュレット TCF6543 2台
 - LIXIL シャワーヘッド BF-SC6 5個
-納期は来月末希望
+来月末希望
 ```
 
-Botが自動的に:
-1. 商品・数量・メーカーを解析
-2. スプシから掛け率を引いて計算
-3. Notionのルールを適用
-4. ドラフトをスレッドに投稿
+### PDF添付で依頼
 
-あなたは内容を確認して、必要なら修正して提出。
+見積依頼書のPDFをBotにDMで送信。テキストを添えることもできる。
+
+### 返ってくる情報
+
+各商品について:
+- **金額**: 定価 → 掛け率適用 → 見積単価 → 小計
+- **納期**: 一般的な納期目安
+- **在庫**: 通常在庫/受注生産/廃番 など
+- **調査メモ**: 注意点・確認事項
 
 ## ファイル構成
 
 ```
 src/
-├── index.ts              # エントリポイント（Slack Bot起動・メッセージ監視）
+├── index.ts              # Slack Bot起動（DM + メンション受付）
 ├── handlers/
-│   └── quote.ts          # 見積もりメインハンドラー（全体の流れを制御）
+│   └── quote.ts          # メインハンドラー（テキスト/PDF両対応）
 ├── services/
 │   ├── parser.ts         # 依頼文のAI解析
 │   ├── sheets.ts         # Google Sheets掛け率取得
 │   ├── notion.ts         # Notion見積もりルール取得
-│   ├── catalog.ts        # メーカーWeb商品検索（検索ヒント生成）
+│   ├── catalog.ts        # AI商品調査（金額・納期・在庫）
 │   ├── calculator.ts     # 見積もり計算エンジン
-│   └── formatter.ts      # Slack投稿フォーマッター
+│   ├── formatter.ts      # Slack投稿フォーマッター
+│   └── pdf-reader.ts     # PDFテキスト抽出
 └── types/
     └── quote.ts          # 型定義
 ```
