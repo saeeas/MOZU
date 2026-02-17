@@ -22,7 +22,7 @@
     "googleapis": "^144.0.0",
     "openai": "^4.70.0",
     "pdf-parse": "^1.1.1",
-    "playwright-core": "^1.58.2"
+    "playwright-core": "^1.56.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
