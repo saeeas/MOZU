@@ -1,10 +1,14 @@
 import { QuoteResult, ItemResearchResult } from "../types/quote";
+import { Recommendation } from "./recommender";
 
 /**
  * 見積もり調査結果をSlackメッセージに整形する
  */
 export class QuoteFormatter {
-  format(result: QuoteResult): { text: string; blocks: any[] } {
+  format(
+    result: QuoteResult,
+    recommendations?: Recommendation[]
+  ): { text: string; blocks: any[] } {
     const blocks: any[] = [];
 
     // ヘッダー
@@ -82,6 +86,39 @@ export class QuoteFormatter {
           },
         ],
       });
+    }
+
+    // 付属品レコメンド
+    if (recommendations && recommendations.length > 0) {
+      blocks.push({ type: "divider" });
+      blocks.push({
+        type: "header",
+        text: { type: "plain_text", text: "おすすめ付属品・関連商品" },
+      });
+      blocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "過去の見積もりデータから、一緒に使われることが多い商品です:",
+        },
+      });
+
+      for (const rec of recommendations) {
+        const price = rec.listPrice
+          ? `定価 ¥${rec.listPrice.toLocaleString()}`
+          : "定価未登録";
+        const confidence = `${(rec.confidence * 100).toFixed(0)}%`;
+        blocks.push({
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: [
+              `*${rec.productName}*${rec.modelNumber ? ` \`${rec.modelNumber}\`` : ""}`,
+              `${price} | 関連度: ${confidence} | ${rec.coOccurrenceCount}件の実績`,
+            ].join("\n"),
+          },
+        });
+      }
     }
 
     return { text: this.formatPlain(result), blocks };
