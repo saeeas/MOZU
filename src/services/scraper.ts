@@ -5,6 +5,8 @@ import { getDatabase } from "./database";
 
 /** スクレイピング設定 */
 interface ScraperConfig {
+  /** LIXIL認証ページURL */
+  authUrl: string;
   /** LIXILポータルURL */
   portalUrl: string;
   /** ログインID */
@@ -69,6 +71,9 @@ export class LixilScraper {
 
   constructor(config?: Partial<ScraperConfig>) {
     this.config = {
+      authUrl:
+        process.env.LIXIL_AUTH_URL ||
+        "https://ex-auth.lixil.co.jp/#/login",
       portalUrl:
         process.env.LIXIL_PORTAL_URL ||
         "https://ptnrportal.apps.lixil.com/l-limb-top/ui/Top/Top.aspx",
@@ -231,46 +236,105 @@ export class LixilScraper {
   /**
    * LIXILポータルにログイン
    *
-   * ASP.NETログインフォーム:
-   * - ユーザーIDとパスワード入力フィールド
-   * - ログインボタン（PostBack）
+   * 認証フロー:
+   * 1. ex-auth.lixil.co.jp でID/PW認証（SPA / #/login）
+   * 2. 認証成功後、ポータル本体にリダイレクト or 手動遷移
    */
   private async login(): Promise<void> {
     const page = this.getPage();
 
-    console.log("[スクレイパー] ポータルにアクセス中...");
-    await page.goto(this.config.portalUrl, { waitUntil: "networkidle" });
+    // --- Step 1: 認証ページにアクセス ---
+    console.log("[スクレイパー] 認証ページにアクセス中...");
+    await page.goto(this.config.authUrl, { waitUntil: "networkidle" });
+    await this.delay(2000); // SPAレンダリング待ち
 
-    // ログインフォームの検出（ASP.NET特有のID命名パターン）
-    // 実際のフォーム要素はポータルの構造に合わせて調整が必要
-    const loginSelectors = [
-      // 一般的なASP.NETのログインフォームパターン
-      'input[id*="UserID"], input[id*="userId"], input[id*="txtLoginId"], input[name*="LoginId"]',
-      'input[id*="Password"], input[id*="password"], input[id*="txtPassword"], input[name*="Password"]',
-      'input[id*="Login"][type="submit"], input[id*="btnLogin"], button[id*="Login"]',
+    // ID入力フィールドを探す（複数パターン対応）
+    const userSelectors = [
+      'input[type="text"]',
+      'input[type="email"]',
+      'input[name*="user" i]',
+      'input[name*="id" i]',
+      'input[name*="login" i]',
+      'input[id*="user" i]',
+      'input[id*="login" i]',
+      'input[placeholder*="ID" i]',
+      'input[placeholder*="ユーザー"]',
+      'input[autocomplete="username"]',
     ];
 
-    // ユーザーID入力
-    const userInput = await page.locator(loginSelectors[0]).first();
+    let userInput = null;
+    for (const sel of userSelectors) {
+      try {
+        const el = page.locator(sel).first();
+        if (await el.isVisible().catch(() => false)) {
+          userInput = el;
+          break;
+        }
+      } catch { continue; }
+    }
+
+    if (!userInput) {
+      // 全input[type=text]を試す
+      userInput = page.locator('input').first();
+    }
+
     await userInput.waitFor({ state: "visible", timeout: 15000 });
     await userInput.fill(this.config.loginId);
+    console.log("[スクレイパー] ID入力完了");
 
-    // パスワード入力
-    const passInput = await page.locator(loginSelectors[1]).first();
+    // PW入力フィールド
+    const passInput = page.locator('input[type="password"]').first();
+    await passInput.waitFor({ state: "visible", timeout: 10000 });
     await passInput.fill(this.config.loginPassword);
+    console.log("[スクレイパー] パスワード入力完了");
 
-    // ログインボタンクリック
-    const loginBtn = await page.locator(loginSelectors[2]).first();
-    await loginBtn.click();
+    // ログインボタン
+    const btnSelectors = [
+      'button[type="submit"]',
+      'button:has-text("ログイン")',
+      'button:has-text("サインイン")',
+      'button:has-text("Login")',
+      'input[type="submit"]',
+      'a:has-text("ログイン")',
+    ];
 
-    // ログイン後のページ遷移を待機
-    await page.waitForLoadState("networkidle");
+    for (const sel of btnSelectors) {
+      try {
+        const btn = page.locator(sel).first();
+        if (await btn.isVisible().catch(() => false)) {
+          await btn.click();
+          console.log("[スクレイパー] ログインボタンクリック");
+          break;
+        }
+      } catch { continue; }
+    }
 
-    // ログイン成功確認（URLが変わる or 特定の要素が表示される）
+    // 認証完了を待機（URLが変わる or ページ遷移）
+    await page.waitForLoadState("networkidle", { timeout: 30000 });
+    await this.delay(3000);
+
+    // --- Step 2: ポータル本体に遷移 ---
     const currentUrl = page.url();
-    if (currentUrl.includes("Login") || currentUrl.includes("login")) {
+    console.log(`[スクレイパー] 認証後URL: ${currentUrl}`);
+
+    if (currentUrl.includes("ex-auth") || currentUrl.includes("login")) {
+      // まだ認証ページにいる場合、エラーメッセージを確認
+      const errorText = await page.locator('.error, .alert, [class*="error"]').innerText().catch(() => "");
+      if (errorText) {
+        throw new Error(`ログイン失敗: ${errorText}`);
+      }
+      // 認証は通ったかもしれないがリダイレクトされていない → ポータルに手動遷移
+      console.log("[スクレイパー] ポータルへ手動遷移...");
+      await page.goto(this.config.portalUrl, { waitUntil: "networkidle" });
+    }
+
+    // 最終確認
+    const finalUrl = page.url();
+    if (finalUrl.includes("login") || finalUrl.includes("Login")) {
       throw new Error("ログインに失敗しました。ID/パスワードを確認してください。");
     }
+
+    console.log(`[スクレイパー] ログイン成功 → ${finalUrl}`);
   }
 
   /**
