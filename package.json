@@ -1,0 +1,25 @@
+{
+  "name": "mozu-quote-bot",
+  "version": "1.0.0",
+  "description": "Slack見積もり自動化Bot - 依頼を受けて掛け率・ルール適用後にドラフト返信",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@slack/bolt": "^4.1.0",
+    "@notionhq/client": "^2.2.0",
+    "googleapis": "^144.0.0",
+    "openai": "^4.70.0",
+    "dotenv": "^16.4.0",
+    "cheerio": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "ts-node": "^10.9.0"
+  }
+}
