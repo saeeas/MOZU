@@ -1,0 +1,222 @@
+/* ── リセット・ベース ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  background: #f4f5f7;
+  color: #1a1a2e;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ── ヘッダー ── */
+header {
+  background: #1a1a2e;
+  color: #fff;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+header h1 { font-size: 20px; font-weight: 700; letter-spacing: .05em; }
+.date-label { font-size: 13px; color: #aab; }
+
+/* アカウント接続状況 */
+#account-status { display: flex; gap: 8px; flex-wrap: wrap; }
+.account-chip {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .2s;
+}
+.account-chip:hover { background: rgba(255,255,255,.2); }
+.account-chip.connected { border-color: #4caf50; }
+.account-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: #666; }
+.account-chip.connected .dot { background: #4caf50; }
+
+/* ── タブ ── */
+.tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 2px solid #e0e0e0;
+  padding: 0 24px;
+}
+.tab {
+  background: none; border: none;
+  padding: 12px 20px;
+  font-size: 14px; font-weight: 600;
+  color: #666; cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: all .2s;
+}
+.tab:hover { color: #1a1a2e; }
+.tab.active { color: #1a1a2e; border-bottom-color: #1a1a2e; }
+
+/* ── タブコンテンツ ── */
+.tab-content { display: none; padding: 20px 24px; }
+.tab-content.active { display: block; }
+
+/* ── カード ── */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+.card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+}
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eee;
+}
+.card-header h2 { font-size: 15px; font-weight: 700; }
+.mt { margin-top: 16px; }
+
+/* ── カレンダーイベント ── */
+.event-list { display: flex; flex-direction: column; gap: 6px; }
+.event-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border-left: 3px solid #ccc;
+  background: #fafafa;
+  transition: background .15s;
+}
+.event-item:hover { background: #f0f0f0; }
+.event-item.mozu { border-left-color: #1a73e8; }
+.event-item.personal { border-left-color: #e8711a; }
+.event-item.allday { border-left-color: #888; background: #f5f5f5; }
+.event-time { min-width: 60px; font-size: 12px; color: #555; font-weight: 600; white-space: nowrap; }
+.event-body { flex: 1; }
+.event-title { font-weight: 600; font-size: 13px; }
+.event-sub { font-size: 11px; color: #888; margin-top: 2px; }
+.event-tag {
+  font-size: 10px; padding: 1px 6px; border-radius: 10px;
+  background: #e8f0fe; color: #1a73e8; margin-left: 6px; white-space: nowrap;
+}
+.event-tag.personal { background: #fce8d5; color: #e8711a; }
+.no-events { color: #999; font-size: 13px; text-align: center; padding: 24px 0; }
+
+/* ── チェックリスト ── */
+.checklist { list-style: none; display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.checklist li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  background: #fafafa;
+  cursor: pointer;
+  user-select: none;
+  transition: all .15s;
+}
+.checklist li:hover { background: #f0f0f0; }
+.checklist li.checked { background: #e8f5e9; border-color: #a5d6a7; opacity: .75; }
+.checklist li.checked .check-label { text-decoration: line-through; color: #888; }
+.check-box {
+  width: 18px; height: 18px;
+  border: 2px solid #bbb; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: all .15s;
+}
+.checklist li.checked .check-box { background: #4caf50; border-color: #4caf50; }
+.check-box::after { content: ""; display: none; width: 5px; height: 9px; border: 2px solid #fff; border-top: none; border-left: none; transform: rotate(45deg) translate(-1px,-1px); }
+.checklist li.checked .check-box::after { display: block; }
+.check-emoji { font-size: 16px; }
+.check-label { flex: 1; font-size: 13px; }
+.badge { background: #e0e0e0; border-radius: 10px; padding: 2px 8px; font-size: 12px; }
+.badge.done { background: #c8e6c9; color: #2e7d32; }
+
+/* ── ドロップゾーン ── */
+.dropzone {
+  border: 2px dashed #d0d0d0;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  transition: all .2s;
+  cursor: pointer;
+}
+.dropzone:hover, .dropzone.drag-over { border-color: #1a73e8; background: #e8f0fe20; }
+.dropzone.success { border-color: #4caf50; background: #e8f5e920; }
+.dropzone-icon { font-size: 28px; }
+.dropzone p { color: #666; font-size: 13px; margin-top: 4px; }
+.dropzone-sub { font-size: 12px; color: #999; }
+.file-link { color: #1a73e8; text-decoration: underline; cursor: pointer; }
+.markup-status { margin-top: 8px; font-size: 12px; color: #666; min-height: 18px; }
+
+/* ── 見積もりフォーム ── */
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-weight: 600; font-size: 12px; color: #555; margin-bottom: 4px; }
+.form-group input {
+  width: 100%; padding: 9px 12px;
+  border: 1px solid #d0d0d0; border-radius: 6px;
+  font-size: 14px; outline: none;
+  transition: border-color .15s;
+}
+.form-group input:focus { border-color: #1a73e8; box-shadow: 0 0 0 2px #1a73e820; }
+.hint { font-size: 12px; color: #1a73e8; margin-top: 3px; display: block; min-height: 16px; }
+
+/* ── ボタン ── */
+.btn-primary {
+  background: #1a1a2e; color: #fff;
+  border: none; border-radius: 6px;
+  padding: 10px 20px; font-size: 14px; font-weight: 600;
+  cursor: pointer; width: 100%; margin-top: 4px;
+  transition: background .15s;
+}
+.btn-primary:hover { background: #2c2c50; }
+.btn-secondary {
+  background: #f0f0f0; color: #333;
+  border: 1px solid #d0d0d0; border-radius: 6px;
+  padding: 5px 12px; font-size: 12px;
+  cursor: pointer; transition: background .15s;
+}
+.btn-secondary:hover { background: #e0e0e0; }
+.btn-icon {
+  background: none; border: none; font-size: 16px; cursor: pointer;
+  color: #666; padding: 2px 6px; border-radius: 4px;
+}
+.btn-icon:hover { background: #f0f0f0; }
+
+/* ── 計算結果 ── */
+.result-maker { font-size: 13px; color: #666; margin-bottom: 12px; }
+.result-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;
+}
+.result-cell {
+  background: #f8f8f8; border-radius: 8px; padding: 12px;
+  text-align: center;
+}
+.result-cell .rc-label { font-size: 11px; color: #888; margin-bottom: 4px; }
+.result-cell .rc-rate { font-size: 18px; font-weight: 700; color: #1a1a2e; }
+.result-cell .rc-price { font-size: 22px; font-weight: 700; color: #1a1a2e; margin-top: 2px; }
+.result-cell .rc-price-label { font-size: 11px; color: #999; }
+.result-cell.purchase { border-top: 3px solid #1a73e8; }
+.result-cell.display  { border-top: 3px solid #e8711a; }
+.result-note { font-size: 12px; color: #888; background: #fffde7; border-radius: 6px; padding: 8px 10px; }
+
+/* ── 掛け率表テーブル ── */
+.rates-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rates-table th, .rates-table td {
+  padding: 7px 12px; text-align: left;
+  border-bottom: 1px solid #eee;
+}
+.rates-table th { background: #f5f5f5; font-weight: 600; color: #555; }
+.rates-table tr:hover td { background: #fafafa; }
+.table-scroll { overflow-x: auto; }
+
+/* ── ユーティリティ ── */
+.loading { color: #999; font-size: 13px; text-align: center; padding: 20px; }
+.placeholder { color: #bbb; text-align: center; padding: 30px 0; font-size: 13px; }
+.error-msg { color: #c62828; font-size: 13px; background: #ffebee; border-radius: 6px; padding: 8px 12px; margin-top: 10px; }

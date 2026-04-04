@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MOZU Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- ヘッダー -->
+  <header>
+    <div class="header-left">
+      <h1>MOZU</h1>
+      <span id="today-date" class="date-label"></span>
+    </div>
+    <div class="header-right" id="account-status"></div>
+  </header>
+
+  <!-- タブ -->
+  <nav class="tabs">
+    <button class="tab active" data-tab="dashboard">今日の予定</button>
+    <button class="tab" data-tab="quote">見積もり計算</button>
+  </nav>
+
+  <!-- ダッシュボードタブ -->
+  <main id="tab-dashboard" class="tab-content active">
+    <div class="two-col">
+
+      <!-- 左: カレンダー -->
+      <section class="card" id="calendar-section">
+        <div class="card-header">
+          <h2>スケジュール</h2>
+          <button class="btn-icon" id="refresh-cal" title="更新">↻</button>
+        </div>
+        <div id="calendar-events">
+          <div class="loading">読み込み中...</div>
+        </div>
+      </section>
+
+      <!-- 右: チェックリスト -->
+      <section class="card" id="checklist-section">
+        <div class="card-header">
+          <h2>朝のチェックリスト</h2>
+          <span id="checklist-progress" class="badge"></span>
+        </div>
+        <ul id="checklist-items" class="checklist"></ul>
+
+        <!-- 掛け率表ドロップゾーン -->
+        <div id="markup-dropzone" class="dropzone">
+          <div class="dropzone-inner">
+            <span class="dropzone-icon">📊</span>
+            <p>掛け率表.xlsx をここにドロップ</p>
+            <p class="dropzone-sub">または <label class="file-link" for="markup-file-input">クリックして選択</label></p>
+            <input type="file" id="markup-file-input" accept=".xlsx" style="display:none">
+          </div>
+          <div id="markup-status" class="markup-status"></div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- 見積もりタブ -->
+  <main id="tab-quote" class="tab-content">
+    <div class="two-col">
+
+      <!-- 左: 入力 -->
+      <section class="card">
+        <div class="card-header"><h2>型番・金額を入力</h2></div>
+
+        <div class="form-group">
+          <label>型番</label>
+          <input type="text" id="product-code" placeholder="例: RUF-ME2406SAW" autocomplete="off">
+          <span id="maker-hint" class="hint"></span>
+        </div>
+        <div class="form-group">
+          <label>定価（税込 円）</label>
+          <input type="number" id="list-price" placeholder="例: 502000" min="0">
+        </div>
+        <button class="btn-primary" id="calc-btn">計算する</button>
+
+        <div id="calc-error" class="error-msg" style="display:none"></div>
+      </section>
+
+      <!-- 右: 結果 -->
+      <section class="card">
+        <div class="card-header"><h2>計算結果</h2></div>
+        <div id="calc-result">
+          <p class="placeholder">型番と定価を入力して計算してください</p>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- 掛け率表プレビュー -->
+    <section class="card mt">
+      <div class="card-header">
+        <h2>掛け率表（現在の内容）</h2>
+        <button class="btn-secondary" id="reload-rates">再読み込み</button>
+      </div>
+      <div id="rates-table-wrap">
+        <p class="placeholder">掛け率表を読み込み中...</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
